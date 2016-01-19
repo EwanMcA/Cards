@@ -3,6 +3,7 @@
 #include <string>
 #include <list>
 #include "GameData.hpp"
+#include "Util.hpp"
 
 void initNetwork(bool test);
 void initServer(const int port);
@@ -17,11 +18,12 @@ bool net_isServer();
 // Send packets
 //void net_GoToNetMenu();
 //void net_StartGame();
-void sendReady();
-void sendText(const std::string& text);
-void sendOrder(Data& gameData);
-//void net_GameAttack(int playerNum, int button);
-//void net_GameBlock(int playerNum, int button, int reactionMilliseconds);
+void send_ready();
+void send_text(const std::string& text);
+void send_order(Data& gameData);
+void send_play_card(int index);
+void send_attack(int attacker, int defender);
+void send_end_turn();
 //void net_GameReset();
 //void net_GameQuit();
 //void net_GameOver(int winningPlayer);
@@ -32,7 +34,7 @@ void sendOrder(Data& gameData);
 // Handle packets
 
 std::string receivePackets_ChatScreen();
-void receivePackets_Game(Data& gameData);
+void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline);
 
 //void checkPackets_Gameloop(GameData& data);
 //void checkPackets_GameOver(GameData& data, bool& done);

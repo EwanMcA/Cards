@@ -2,6 +2,7 @@
 #include <freeglut.h>
 #include <list>
 #include "render.hpp"
+#include <iostream>
 
 
 void renderBitmapString(
@@ -79,7 +80,7 @@ void renderMessageDisplayBox(float x, float y, float z, float width, float heigh
 
 // GAME
 
-void renderGameBoard(int SCREEN_WIDTH, int SCREEN_HEIGHT) {
+void renderGameBoard(int SCREEN_WIDTH, int SCREEN_HEIGHT, Data& gameData) {
 	float x = -1.6f;
 	float y = 0.9f;
 	float z = 0.0f;
@@ -106,12 +107,25 @@ void renderGameBoard(int SCREEN_WIDTH, int SCREEN_HEIGHT) {
 	renderDeck(1, -1.8f, -0.475f, 0.0f, 1);
 	renderDeck(60, -1.8f, 0.9f, 0.0f, 1);
 	renderDeck(1, 1.6f, 0.9f, 0.0f, 1);
-
-	renderEnergy(5, 0.7f, -0.925f, 0.0f);
-	renderEnergy(5, -1.45f, 1.02f, 0.0f);
+	renderEnergy(gameData.get_energy_player().get_current(), 0.7f, -0.925f, 0.0f);
+	renderEnergy(gameData.get_energy_opponent().get_current(), -1.45f, 1.02f, 0.0f);
+	renderPlayer(gameData.get_opponent(), -0.2f, 0.45f, 0.0f);
+	renderPlayer(gameData.get_player(), -0.2f, -0.9f, 0.0f);
 }
 
-void renderEnergy(int energy, float x, float y, float z)
+void renderPlayer(Player player, float x, float y, float z)
+{
+	glColor3f(1.0f, 0.8f, 0.0f);
+	glBegin(GL_QUADS);
+		glVertex3f(x, y, z);
+		glVertex3f(x + 0.4, y, z);
+		glVertex3f(x + 0.4, y + 0.5, z);
+		glVertex3f(x, y + 0.5, z);
+	glEnd();
+}
+
+
+void renderEnergy(short energy, float x, float y, float z)
 {
 	glColor3f(0.7f, 0.6f, 0.5f);
 	glBegin(GL_QUADS);
@@ -165,10 +179,14 @@ void renderCard(CardHolder ch, bool face_up, bool highlight) {
 	glEnd();
 
 	glColor3f(1.0f, 0.2f, 0.2f);
-
-//	renderBitmapString(x +0.0075*ch.getScale(), y + 0.025*ch.getScale(), 0.0, GLUT_BITMAP_HELVETICA_18, std::to_string(ch.getCard().getAttack()).c_str());
-//	renderBitmapString(x + 0.2*ch.getScale()-0.025*ch.getScale(), y + 0.025*ch.getScale(), 0.0, GLUT_BITMAP_HELVETICA_18, std::to_string(ch.getCard().getHealth()).c_str());
-
+	void * font = GLUT_BITMAP_HELVETICA_18;
+	if (ch.getZ() < 1.0f) { font = GLUT_BITMAP_HELVETICA_12; }
+	if (face_up) {
+		renderBitmapString(x+0.01*ch.getScale(), 
+			y + 0.025*ch.getScale(), ch.getZ(), font, std::to_string(ch.getCard().get_current_attack()).c_str());
+		renderBitmapString(x + 0.15f*ch.getScale() - 0.05*ch.getScale(), 
+			y + 0.025*ch.getScale(), ch.getZ(), font, std::to_string(ch.getCard().get_current_health()).c_str());
+	}
 }
 
 void renderDeck(int size, float x, float y, float z, float scale)
@@ -192,4 +210,21 @@ void renderDeck(int size, float x, float y, float z, float scale)
 		glEnd();
 		x += 0.005f;
 	}
+}
+
+void renderArrow(float xs, float ys, float zs, float xe, float ye, float ze)
+{
+	
+	float half_width = 0.1f;
+	glColor3f(1.0f, 0.0f, 0.0f);
+	/*glBegin(GL_QUADS);
+		glVertex3f(xs - half_width, ys, zs);
+		glVertex3f(xe - half_width, ye, zs);
+		glVertex3f(xs + half_width, ye, zs);
+		glVertex3f(xe + half_width, ys, zs);
+	glEnd();*/
+	glBegin(GL_LINES);
+		glVertex3f(xs, ys, zs);
+		glVertex3f(xe, ye, ze);
+	glEnd();
 }

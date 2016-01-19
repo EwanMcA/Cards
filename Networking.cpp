@@ -23,7 +23,10 @@ enum GameMessages
 	ID_GAME_MESSAGE_1 = ID_USER_PACKET_ENUM + 1,
 	ID_TEXT,
 	ID_READY,
-	ID_ORDER
+	ID_ORDER,
+	ID_PLAY_CARD,
+	ID_END_TURN,
+	ID_ATTACK
 };
 
 void initServer(const int port)
@@ -182,9 +185,8 @@ std::string receivePackets_ChatScreen()
 	return (std::string) result;
 }
 
-void receivePackets_Game(Data& gameData)
+void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline)
 {
-	std::string result;
 	for (packet = peer->Receive(); packet; peer->DeallocatePacket(packet), packet = peer->Receive())
 	{
 		switch (packet->data[0])
@@ -240,15 +242,33 @@ void receivePackets_Game(Data& gameData)
 			printf("%s\n", rs.C_String());
 		}
 		break;
-		case ID_TEXT:
+		case ID_PLAY_CARD:
 		{
-			RakNet::RakString rs;
+			int index;
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-			bsIn.Read(rs);
-			result = rs.C_String();
+			bsIn.Read(index);
+			gameData.add_played_index(index);
+			action_pipeline.push_back(&opponent_play_card);
 		}
 		break;
+		case ID_END_TURN:
+		{
+			action_pipeline.push_back(&end_turn);
+		}
+		break;
+		case ID_ATTACK:
+		{
+			int attacker;
+			int defender;
+			RakNet::BitStream bsIn(packet->data, packet->length, false);
+			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
+			bsIn.Read(attacker);
+			bsIn.Read(defender);
+			gameData.setup_attack(attacker, defender);
+			action_pipeline.push_back(&attack);
+			break;
+		}
 		case ID_ORDER:
 		{
 			bool playFirst;
@@ -296,7 +316,8 @@ bool net_isServer()
 	return isServer;
 }
 
-void sendReady() {
+void send_ready() 
+{
 	if (peer == NULL || !isConnected)
 		return;
 
@@ -306,7 +327,7 @@ void sendReady() {
 }
 
 
-void sendText(const std::string& text)
+void send_text(const std::string& text)
 {
 	if (peer == NULL || !isConnected)
 		return;
@@ -318,7 +339,7 @@ void sendText(const std::string& text)
 	sendPacket(bsOut);
 }
 
-void sendOrder(Data& gameData) 
+void send_order(Data& gameData) 
 {
 	if (peer == NULL || !isConnected)
 		return;
@@ -336,4 +357,41 @@ void closeNetworking()
 	RakNet::RakPeerInterface::DestroyInstance(peer);
 	peer = NULL;
 }
+
+// Game Mechanics
+
+void send_play_card(int index)
+{
+	if (peer == NULL || !isConnected)
+		return;
+
+	RakNet::BitStream bsOut;
+	bsOut.Write((RakNet::MessageID)ID_PLAY_CARD);
+	bsOut.Write(index);
+	sendPacket(bsOut);
+}
+
+void send_end_turn()
+{
+	if (peer == NULL || !isConnected)
+		return;
+
+	RakNet::BitStream bsOut;
+	bsOut.Write((RakNet::MessageID)ID_END_TURN);
+	sendPacket(bsOut);
+}
+
+void send_attack(int attacker, int defender) 
+{
+	if (peer == NULL || !isConnected)
+		return;
+
+	RakNet::BitStream bsOut;
+	bsOut.Write((RakNet::MessageID)ID_ATTACK);
+	bsOut.Write(attacker);
+	bsOut.Write(defender);
+	sendPacket(bsOut);
+}
+
+
 

@@ -10,41 +10,34 @@
 #include <deque>
 
 #include "BoizStone.hpp"
+#include "Util.hpp"
 #include "Networking.hpp"
 #include "GameData.hpp"
 #include "render.hpp"
 #include "Cards.hpp"
 
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 600;
+float * getRayFromMouse(int x, int y)
+{
 
-std::string msg = "";
-std::list<std::string> messages;
+	GLint viewport[4];
+	GLdouble modelview[16];
+	GLdouble projection[16];
+	GLfloat winX, winY;
+	GLdouble posXs, posYs, posZs;
+	GLdouble posXe, posYe, posZe;
 
-enum eGameState {CHAT_SCREEN, START_GAME, GAME};
-eGameState currentGameState;
+	glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+	glGetDoublev(GL_PROJECTION_MATRIX, projection);
+	glGetIntegerv(GL_VIEWPORT, viewport);
 
-bool ready;
-bool opponentReady;
-int turn = 0;
-
-Data gameData;
-Card ewan(1, 8, 8, 2, 2, 2);
-CardHolder ch(ewan, 0.0f, -0.35f, 0.0f, 1);
-CardHolder ch1(ewan, -0.3f, -0.6f, 1.0f, 1);
-
-std::vector<CardHolder> hand;
-std::vector<CardHolder> in_play;
-std::deque<CardHolder> drawing_cards;
-std::vector<CardHolder> hand_opponent;
-std::vector<CardHolder> in_play_opponent;
-std::deque<CardHolder> drawing_cards_opponent;
-float depth = 2.25f; // camera z position.
-
-CardHolder* hoverCard = nullptr;
-bool cardGrabbed = false;
-float movX = 0.0f;
-float movY = 0.0f;
+	winX = (float)x;
+	winY = (float)viewport[3] - (float)y;
+	//glReadPixels(x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ);
+	gluUnProject(winX, winY, 0.0f, modelview, projection, viewport, &posXs, &posYs, &posZs);
+	gluUnProject(winX, winY, 1.0f, modelview, projection, viewport, &posXe, &posYe, &posZe);
+	float coords[6] = { posXs, posYs, posZs, posXe, posYe, posZe };
+	return coords;
+}
 
 void changeViewPort(int width, int height)
 {
@@ -70,28 +63,37 @@ void render()
 		renderConnectionMenu(ready, msg, messages);
 		break;
 	case  START_GAME:
-		renderGameBoard(GLUT_WINDOW_WIDTH, GLUT_WINDOW_HEIGHT);
+		renderGameBoard(GLUT_WINDOW_WIDTH, GLUT_WINDOW_HEIGHT, gameData);
 		// render something to see play order.
 		break;
 	case GAME:
-		renderGameBoard(GLUT_WINDOW_WIDTH, GLUT_WINDOW_HEIGHT);
-		for (std::vector<CardHolder>::size_type i = 0; i < hand.size(); i++) {
-			renderCard(hand.at(i), true, hoverCard == &hand.at(i));
+		renderGameBoard(GLUT_WINDOW_WIDTH, GLUT_WINDOW_HEIGHT, gameData);
+		for (auto const &it : hand) {
+			renderCard(it.second, true, hoverCard == &it.second);
 		}
-		for (std::vector<CardHolder>::size_type i = 0; i < in_play.size(); i++) {
-			renderCard(in_play.at(i), true, hoverCard == &in_play.at(i));
+		for (auto const &it : in_play) {
+			renderCard(it.second, true, hoverCard == &it.second);
 		}
-		for (std::deque<CardHolder>::size_type i = 0; i < drawing_cards.size(); i++) {
-			renderCard(drawing_cards.at(i), true, false);
+		for (std::list<std::pair<int, CardHolder>>::iterator it = drawing_cards.begin(); it != drawing_cards.end(); ++it) {
+			renderCard(it->second, true, false);
 		}
-		for (std::vector<CardHolder>::size_type i = 0; i < hand_opponent.size(); i++) {
-			renderCard(hand_opponent.at(i), false, hoverCard == &hand_opponent.at(i));
+		for (std::list<std::pair<int, CardHolder>>::iterator it = playing_cards.begin(); it != playing_cards.end(); ++it) {
+			renderCard(it->second, true, false);
 		}
-		for (std::vector<CardHolder>::size_type i = 0; i < in_play_opponent.size(); i++) {
-			renderCard(in_play_opponent.at(i), true, hoverCard == &in_play_opponent.at(i));
+		for (auto const &it : hand_opponent) {
+			renderCard(it.second, false, hoverCard == &it.second);
 		}
-		for (std::deque<CardHolder>::size_type i = 0; i < drawing_cards_opponent.size(); i++) {
-			renderCard(drawing_cards_opponent.at(i), false, false);
+		for (auto const &it : in_play_opponent) {
+			renderCard(it.second, true, hoverCard == &it.second);
+		}
+		for (std::list<std::pair<int, CardHolder>>::iterator it = drawing_cards_opponent.begin(); it != drawing_cards_opponent.end(); ++it) {
+			renderCard(it->second, false, false);
+		}
+		for (std::list<std::pair<int, CardHolder>>::reverse_iterator it = playing_cards_opponent.rbegin(); it != playing_cards_opponent.rend(); ++it) {
+			renderCard(it->second, true, false);
+		}
+		if (attack_drag) {
+			renderArrow(attackingCard->getX()+0.075f, attackingCard->getY()+0.15f, 0.0f, arrow_head_x, arrow_head_y, 0.0f);
 		}
 		if (cardGrabbed) { renderCard(*hoverCard, true, true); }
 		/*if (gameData.getPlayFirst()) {glColor3f(1.0, 0.0, 0.0);}
@@ -127,19 +129,30 @@ void idleFunction()
 		}
 		break;
 	case START_GAME:
-		receivePackets_Game(gameData);
+		receivePackets_Game(gameData, action_pipeline);
 		decideOrder(gameData);
 		//initialDraw();
 		currentGameState = GAME;
 		glutPostRedisplay();
 		break;
 	case GAME:
-		receivePackets_Game(gameData);
+		receivePackets_Game(gameData, action_pipeline);
+		if (!action_pipeline.empty()) 
+			action_pipeline.front()();
+		drawApproach(); // animated card-draw;
+		if (cardGrabbed && hoverCard->getY() > -0.3f) {
+			if (hoverCard->getZ() > 0.0f) {
+				hoverCard->moveBy(0.0f, 0.0f, -0.0025f);
+				glutPostRedisplay();
+			}
+		}
+		else if (cardGrabbed && hoverCard->getZ() < 1.0f) {
+			hoverCard->moveTo(hoverCard->getX(), hoverCard->getY(), 1.0f);
+			glutPostRedisplay();
+		}
 		break;
 	}
 	incMsg = "";
-	cardApproach(); // animated card-draw;
-	if (drawing_cards.size() > 0 || drawing_cards_opponent.size() > 0) { glutPostRedisplay(); }
 }
 
 void keyPress(unsigned char key, int mousex, int mousey) 
@@ -148,7 +161,7 @@ void keyPress(unsigned char key, int mousex, int mousey)
 	switch (key) {
 	case 13: 
 		messages.push_back("You: "+msg);
-		sendText(msg);
+		send_text(msg);
 		msg = "";
 		break;
 	case 8:
@@ -169,21 +182,18 @@ void specPress(int key, int x, int y)
 		depth -= 0.05f;
 	}
 	else if (key == GLUT_KEY_RIGHT) {
-		drawing_cards.push_back(getCardFromDeck());
-		drawing_cards_opponent.push_back(getCardFromOpponentDeck());
-		positionHand(hand);
-		positionOpponentHand(hand_opponent);
+		if (gameData.is_my_turn()) { action_pipeline.push_back(&end_turn); }
 	}
-	else if (key == GLUT_KEY_LEFT) {
-		if (hand.size() > 0) {
-			hand.pop_back();
-			positionHand(hand);
-		} 
-		if (hand_opponent.size() > 0) {
-			hand_opponent.pop_back();
-			positionOpponentHand(hand_opponent);
-		}
-	}
+	//else if (key == GLUT_KEY_LEFT) {
+	//	if (hand.size() > 0) {
+	//		hand.pop_back();
+	//		position_hand(hand);
+	//	} 
+	//	if (hand_opponent.size() > 0) {
+	//		hand_opponent.pop_back();
+	//		position_hand_opponent(hand_opponent);
+	//	}
+	//}
 	glutPostRedisplay();
 }
 
@@ -200,34 +210,51 @@ void mouseClick(int button, int state, int x, int y)
 	if (button == GLUT_LEFT_BUTTON) {
 		// button release
 		if (state == GLUT_UP) {
-			
 			if (currentGameState == CHAT_SCREEN) {
 				if (x > 100 && y > 510 && x < 220 && y < 550) {
 					messages.push_back("...ready...");
 					glutPostRedisplay();
-					sendReady();
+					send_ready();
 					ready = (ready) ? false : true;
 				}
 			}
 			else if (currentGameState == GAME) {
 				if (cardGrabbed) {
-					//if (mouseIsAboveField())
-					play_card(*hoverCard);
+					if (hoverCard->getY() > -0.3f)
+						play_card(hoverID);
 					cardGrabbed = false;
 				}
-				positionHand(hand);
+				else if (attack_drag) { //&& hoverCard != attackingCard // some allowance for click-and-move?
+					// check attack ...
+					if (hoverCard != nullptr) {
+						// attack.
+						send_attack(attackerID, hoverID);
+						gameData.setup_attack(attackerID, hoverID);
+						action_pipeline.push_back(&attack);
+					}
+					attack_drag = false;
+				}
+				position_hand(hand);
 				movX = 0;
 				movY = 0;
+				arrow_head_x = 0;
+				arrow_head_y = 0;
 			}
 		}
 		else if (state == GLUT_DOWN) {
 			if (currentGameState == GAME) {
-				for (std::vector<CardHolder>::size_type i = 0; i < hand.size(); i++) {
-					if (hoverCard == &hand.at(i)) {
+				if (gameData.is_my_turn() && hoverCard != nullptr)
+					if (hand.find(hoverID) != hand.end() &&
+						hoverCard->getCard().getCost() <= gameData.get_energy_player().get_current()) {
 						cardGrabbed = true;
-						break;
 					}
-				}
+					else if (in_play.find(hoverID) != in_play.end() && hoverCard->getCard().can_attack()) {
+						attackingCard = hoverCard;
+						attackerID = hoverID;
+						attack_drag = true;
+						arrow_head_x = hoverCard->getX() + 0.075f;
+						arrow_head_y = hoverCard->getY() + 0.15f;
+					}
 			}
 		}
 	}
@@ -243,18 +270,24 @@ void mousePassive(int x, int y)
 	float posXe = *(++objectCoords);
 	float posYe = *(++objectCoords);
 	float posZe = *(++objectCoords);
-	hoverCard = nullptr;
-	for (std::vector<CardHolder>::iterator it = hand.begin(); it != hand.end(); ++it) {
-		if (it->collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
-			hoverCard = it._Ptr;
+	if (hoverCard == nullptr || !hoverCard->collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
+		hoverCard = nullptr;
+		position_hand(hand);
+		for (auto &it : hand) {
+			if (it.second.collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
+				hoverCard = &it.second;
+				hoverID = it.first;
+			}
 		}
-	}
-	for (std::vector<CardHolder>::iterator it = in_play.begin(); it != in_play.end(); ++it) {
-		if (it->collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
-			hoverCard = it._Ptr;
+		for (auto &it : in_play) {
+			if (it.second.collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
+				hoverCard = &it.second;
+				hoverID = it.first;
+			}
 		}
+		position_hand(hand);
+		glutPostRedisplay();
 	}
-	glutPostRedisplay();
 	//std::cout << std::to_string(posX) + " " + std::to_string(posY)+ " " + std::to_string(posZ) << std::endl;
 }
 
@@ -267,126 +300,45 @@ void mouseActive(int x, int y)
 	float posXe = *(++objectCoords);
 	float posYe = *(++objectCoords);
 	float posZe = *(++objectCoords);
-	if (hoverCard != nullptr) {
-		if (cardGrabbed) {
-			float t = (1.0f - posZs) / (posZe - posZs);
-			float x = posXs + t*(posXe - posXs);
-			float y = posYs + t*(posYe - posYs);
-			if (movX == 0) { movX = x; }
-			if (movY == 0) { movY = y; }
-			hoverCard->moveBy(x - movX, y - movY, 0.0f);
-			movX = x;
-			movY = y;
+	if (hoverCard != nullptr && cardGrabbed) {
+		float t = (hoverCard->getZ() - posZs) / (posZe - posZs);
+		float x = posXs + t*(posXe - posXs);
+		float y = posYs + t*(posYe - posYs);
+		if (movX == 0) { movX = x; }
+		if (movY == 0) { movY = y; }
+		hoverCard->moveBy(x - movX, y - movY, 0.0f);
+		movX = x;
+		movY = y;
+	}
+	if (attack_drag) {
+		float t = (0.0f - posZs) / (posZe - posZs); // assuming card is at z = 0.0f
+		float x = posXs + t*(posXe - posXs);
+		float y = posYs + t*(posYe - posYs);
+		arrow_head_x = x;
+		arrow_head_y = y;
+		if (hoverCard == nullptr || !hoverCard->collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
+			hoverCard = nullptr;
+			for (auto &it : in_play_opponent) {
+				if (it.second.collidesWithRay(posXs, posYs, posZs, posXe, posYe, posZe)) {
+					hoverCard = &it.second;
+					hoverID = it.first;
+				}
+			}
 		}
 	}
 	glutPostRedisplay();
 }
 
-void startGame(bool start, std::list<std::string>& messages) 
-{
-	static int i = 5;
-	if (!start) { i = 5; }
-	else {
-		messages.push_back(std::to_string(i));
-		i--;
-		if (i < -750) { currentGameState = START_GAME; }
-	}
+void request_repaint() {
+	glutPostRedisplay();
 }
 
-void decideOrder(Data& gameData)
-{
-	if (net_isServer()) {
-		gameData.setPlayFirst((std::rand() % 2) != 0);
-		std::cout << std::to_string(gameData.getPlayFirst());
-		sendOrder(gameData);
-	}
-}
-
-float * getRayFromMouse(int x, int y)
-{
-
-	GLint viewport[4];
-	GLdouble modelview[16];
-	GLdouble projection[16];
-	GLfloat winX, winY;
-	GLdouble posXs, posYs, posZs;
-	GLdouble posXe, posYe, posZe;
-
-	glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-	glGetDoublev(GL_PROJECTION_MATRIX, projection);
-	glGetIntegerv(GL_VIEWPORT, viewport);
-
-	winX = (float)x;
-	winY = (float)viewport[3] - (float)y;
-	//glReadPixels(x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ);
-	gluUnProject(winX, winY, 0.0f, modelview, projection, viewport, &posXs, &posYs, &posZs);
-	gluUnProject(winX, winY, 1.0f, modelview, projection, viewport, &posXe, &posYe, &posZe);
-	float coords[6] = { posXs, posYs, posZs, posXe, posYe, posZe };
-	return coords;
-}
-
-void positionHand(std::vector<CardHolder>& hand) {
-	int size = hand.size();
-	float xInc = 0.175f;
-	if (size > 5) { xInc = 0.75f/size; }
-	//float width = size*0.15f;
-	for (std::vector<CardHolder>::size_type i = 0; i < hand.size(); i++) {
-		hand.at(i).moveTo(-0.4f + xInc*i, -0.6f, 1.0f);
-	}
-}
-
-void positionOpponentHand(std::vector<CardHolder>& hand) {
-	int size = hand.size();
-	float xInc = 0.175f;
-	if (size > 5) { xInc = 0.75f / size; }
-	//float width = size*0.15f;
-	for (std::vector<CardHolder>::size_type i = 0; i < hand.size(); i++) {
-		hand.at(i).moveTo(-0.4f + xInc*i, 0.6f, 0.5f);
-	}
-}
-
-void cardApproach() {
-	for (std::deque<CardHolder>::size_type i = 0; i < drawing_cards.size(); i++) {
-		drawing_cards.at(i).moveBy(-0.001f, -0.00005f, 0.0f);
-		if (drawing_cards.at(i).getX() < 0) {
-			hand.push_back(drawing_cards.front());
-			drawing_cards.pop_front();
-			positionHand(hand);
-		}
-		glutPostRedisplay();
-	}
-	for (std::deque<CardHolder>::size_type i = 0; i < drawing_cards_opponent.size(); i++) {
-		drawing_cards_opponent.at(i).moveBy(0.001f, -0.00005f, 0.0f);
-		if (drawing_cards_opponent.at(i).getX() > 0) {
-			hand_opponent.push_back(drawing_cards_opponent.front());
-			drawing_cards_opponent.pop_front();
-			positionOpponentHand(hand_opponent);
-		}
-		glutPostRedisplay();
-	}
-}
-
-CardHolder getCardFromDeck() {
-	CardHolder holder(ewan, 0.85f, -0.5f, 1.0f, 1);
-	return holder;
-}
-
-CardHolder getCardFromOpponentDeck() {
-	CardHolder holder(ewan, -1.2f, 0.55f, 0.5f, 1);
-	return holder;
-}
-
-void play_card(CardHolder &holder)
-{
-	//activate abilities.
-	//hand.erase()
-}
 
 int main(int argc, char* argv[]) {
 
 	////////////////////////////////////////// RakNet //////////////////////////////////////////////////////
 
-	initNetwork(true);
+	initNetwork(false);
 
 	////////////////////////////////////////// OPEN GL //////////////////////////////////////////////////////
 	// Initialize GLUT
@@ -418,12 +370,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	in_play.push_back(ch);
-	hand.push_back(ch1);
-	hand_opponent.push_back(ch1);
-	hand_opponent.push_back(ch1);
-	positionHand(hand);
-	positionOpponentHand(hand_opponent);
+	position_hand(hand);
+	position_hand_opponent(hand_opponent);
+	if (net_isServer()) { gameData.toggle_turn(); }
 
 	srand(time(NULL));
 
