@@ -24,28 +24,29 @@ long get_delta_time() {
 	return delta;
 }
 
-//float * getRayFromMouse(int x, int y)
-//{
-//
-//	GLint viewport[4];
-//	GLdouble modelview[16];
-//	GLdouble projection[16];
-//	GLfloat winX, winY;
-//	GLdouble posXs, posYs, posZs;
-//	GLdouble posXe, posYe, posZe;
-//
-//	glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-//	glGetDoublev(GL_PROJECTION_MATRIX, projection);
-//	glGetIntegerv(GL_VIEWPORT, viewport);
-//
-//	winX = (float)x;
-//	winY = (float)viewport[3] - (float)y;
-//	//glReadPixels(x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ);
-//	gluUnProject(winX, winY, 0.0f, modelview, projection, viewport, &posXs, &posYs, &posZs);
-//	gluUnProject(winX, winY, 1.0f, modelview, projection, viewport, &posXe, &posYe, &posZe);
-//	float coords[6] = { posXs, posYs, posZs, posXe, posYe, posZe };
-//	return coords;
-//}
+Terrible method - Use depth buffer instead of ray casting.
+float * getRayFromMouse(int x, int y)
+{
+
+	GLint viewport[4];
+	GLdouble modelview[16];
+	GLdouble projection[16];
+	GLfloat winX, winY;
+	GLdouble posXs, posYs, posZs;
+	GLdouble posXe, posYe, posZe;
+
+	glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+	glGetDoublev(GL_PROJECTION_MATRIX, projection);
+	glGetIntegerv(GL_VIEWPORT, viewport);
+
+	winX = (float)x;
+	winY = (float)viewport[3] - (float)y;
+	//glReadPixels(x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ);
+	gluUnProject(winX, winY, 0.0f, modelview, projection, viewport, &posXs, &posYs, &posZs);
+	gluUnProject(winX, winY, 1.0f, modelview, projection, viewport, &posXe, &posYe, &posZe);
+	float coords[6] = { posXs, posYs, posZs, posXe, posYe, posZe };
+	return coords;
+}
 
 void changeViewPort(int width, int height)
 {
