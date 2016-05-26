@@ -2,7 +2,9 @@
 #include "GameData.hpp"
 
 Data::Data(Player& player, Player& opponent)
-	:playFirst(false), orderDecided(false), my_turn(false), player(player), opponent(opponent), energy_player(), energy_opponent()
+	:turn(0), game_state(GAME), playFirst(false), orderDecided(false), my_turn(false),
+	player(player), opponent(opponent), energy_player(), energy_opponent(),
+	ready_player(false), ready_opponent(false)
 {
 
 }

@@ -1,0 +1,49 @@
+
+0
+Creature
+Ewan
+cost 
+	1
+attack
+	2
+health
+	3
+status
+	0
+ability (int bit field)
+	0
+target (int bit field)
+	0
+effect (int bit field)
+	0
+
+1
+Creature
+Taunter
+cost 
+	1
+attack
+	1
+health
+	3
+status
+	1
+ability (int bit field)
+	0
+target (int bit field)
+	0
+effect (int bit field)
+	0
+
+2
+Spell
+Fireball
+cost
+	4
+ability (int bit field)
+	1
+target (int bit field)
+	2
+effect (int bit field)
+	1
+

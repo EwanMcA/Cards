@@ -59,6 +59,7 @@ enum effects {
 };
 
 class Card { // eventually might want to make 2 classes - card (predefined/unchanging) and entity (playable/mutable)
+	// Also might want Card parent class, spell/creature subclasses.
 	std::string type;
 	short attack;
 	short health;
@@ -74,7 +75,7 @@ class Card { // eventually might want to make 2 classes - card (predefined/uncha
 	short current_health;
 	int current_status;
 public:
-	Card(int ID, std::string type, short attack, short health, short cost, int abilities, int targets, int effects);
+	Card(int ID, std::string type, short attack, short health, short cost, int status, int abilities, int targets, int effects);
 	Card(std::string line);
 	~Card();
 	void set_play_ID(int ID) { this->ID = ID; }
@@ -83,6 +84,7 @@ public:
 	short get_attack() const { return attack; }
 	short get_health() const { return health; }
 	short getCost() const { return cost; }
+	int getStatus() const { return status; }
 	int getAbilities() const { return abilities; }
 	int getTargets() const { return targets; }
 	int getEffects() const { return effects; }
@@ -98,39 +100,30 @@ public:
 class CardHolder{
 	float x, y, z;
 	float scale;
-	Card& card;
+	Card card;
 	bool face_up;
+	bool attackable;
 	//Border
 	//blah blah
 public:
 	CardHolder(Card& card, float x, float y, float z, float scale, bool face_up);
-	Card& getCard() const { return card; }
+	Card& getCard() { return card; }
 	float getX() const { return x; }
 	float getY() const { return y; }
 	float getZ() const { return z; }
 	float getScale() const { return scale; }
 	void moveBy(float x, float y, float z);
 	void moveTo(float x, float y, float z);
+	bool moveToward(float x, float y, float z, long delta);
 	void resize(float scale) { this->scale = scale; }
 	bool collidesWithRay(float xs, float ys, float zs, float xe, float ye, float ze); // seems like this will be tricky with perspectives
 	bool collidesWithPoint(float x, float y, float z);
 	bool is_face_up() { return face_up; }
 	bool set_face_up(bool up) { face_up = up; }
 	void set_z(float z) { this->z = z; }
-
+	bool isAttackable() const { return attackable; }
+	void set_attackable(bool can_attack) { attackable = can_attack; }
 };
-
-//class Hand { ///// If all it's going to do is position them, may as well do it with a function.
-//	int size;
-//	int max;
-//	std::list<CardHolder&> holders;
-//public:
-//	Hand(std::list<CardHolder&>& holders);
-//	void addHolder(CardHolder& holder) { holders.push_back(holder); }
-//	void removeHolder(CardHolder& holder) { holders.remove(holder); }
-//	std::list<CardHolder&>& getHolders() { return holders; }
-//	void positionCards();
-//};
 
 class Deck {
 	int cardsRemaining;
@@ -139,6 +132,7 @@ public:
 	Deck();
 	Deck(int size, std::list<int> cardIDs);
 	int getTopID() const { return cardIDs.front(); }
+	void pop_front_card() { cardIDs.pop_front(); }
 	void shuffle();
 	void discard(int num);
 	//void readDeckFromFile(std::string filename);
@@ -146,7 +140,8 @@ public:
 
 class DiscardPile {
 	int size;
-	std::list<int> cardIDs;
+	//std::list<int> cardIDs;
+
 public:
 	DiscardPile();
 	void addCard(int CardID);
@@ -159,6 +154,6 @@ class CardCache {
 	//std::map<int, image> imageMap;
 public:
 	CardCache();
-	void loadCard(int ID);
-	Card& get_card(int global_ID);
+	void loadCard(int global_ID);
+	Card get_card(int global_ID);
 };

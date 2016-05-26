@@ -18,6 +18,19 @@ bool isServer;
 bool isConnected = false;
 RakNet::Packet *packet;
 
+/* from dinoMage - 
+"LAN IP Address - For connections between computers sharing a router (Local Area Network, LAN), 
+you must use your LAN IP.\n"
+"This can be found on Windows with the 'ipconfig' command (Start > Run > cmd.exe) or 
+on Linux using 'ifconfig'.\n\n"
+"Global IP Address - Your global IP can be found by searching on the internet for \"my ip\".\n"
+"Routers often use Network Address Translation (NAT), which means that the router holds your global IP.  
+If you intend to host, you must redirect connections from the global IP to the LAN IP for your particular machine.\n"
+"In your router settings, you should find an option to set up port 
+redirection/forwarding/mapping and specify the LAN IP and port you want to use.  
+It is recommended that you also associate a static LAN IP with your machine's unique MAC address.\n\n"
+*/
+
 enum GameMessages
 {
 	ID_GAME_MESSAGE_1 = ID_USER_PACKET_ENUM + 1,
@@ -185,7 +198,7 @@ std::string receivePackets_ChatScreen()
 	return (std::string) result;
 }
 
-void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline)
+void receivePackets_Game(Data& gameData)
 {
 	for (packet = peer->Receive(); packet; peer->DeallocatePacket(packet), packet = peer->Receive())
 	{
@@ -224,6 +237,8 @@ void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline)
 			else {
 				printf("We have been disconnected.\n");
 			}
+			//gameData.insert_next_action(&end_game);
+			std::exit(0);
 			break;
 		case ID_CONNECTION_LOST:
 			if (isServer) {
@@ -249,12 +264,12 @@ void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline)
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
 			bsIn.Read(index);
 			gameData.add_played_index(index);
-			action_pipeline.push_back(&opponent_play_card);
+			gameData.queue_action(&opponent_play_card);
 		}
 		break;
 		case ID_END_TURN:
 		{
-			action_pipeline.push_back(&end_turn);
+			gameData.queue_action(&end_turn);
 		}
 		break;
 		case ID_ATTACK:
@@ -266,7 +281,7 @@ void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline)
 			bsIn.Read(attacker);
 			bsIn.Read(defender);
 			gameData.setup_attack(attacker, defender);
-			action_pipeline.push_back(&attack);
+			gameData.queue_action(&attack);
 			break;
 		}
 		case ID_ORDER:

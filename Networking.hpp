@@ -34,7 +34,7 @@ void send_end_turn();
 // Handle packets
 
 std::string receivePackets_ChatScreen();
-void receivePackets_Game(Data& gameData, std::deque<fp>& action_pipeline);
+void receivePackets_Game(Data& gameData);
 
 //void checkPackets_Gameloop(GameData& data);
 //void checkPackets_GameOver(GameData& data, bool& done);

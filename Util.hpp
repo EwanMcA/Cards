@@ -5,31 +5,18 @@
 #include "Cards.hpp"
 #include "Player.hpp"
 
+
 extern const int SCREEN_WIDTH;
 extern const int SCREEN_HEIGHT;
 extern std::string msg;
 extern std::list<std::string> messages;
-extern bool ready;
-extern bool opponentReady;
-extern int turn;
-extern Data gameData;
 
 extern float depth;
 
-typedef void(*fp)();
-extern std::deque<fp> action_pipeline;
-
-extern std::map<int, CardHolder> hand;
-extern std::map<int, CardHolder> in_play;
 extern std::list<std::pair<int, CardHolder>> drawing_cards;
 extern std::list<std::pair<int, CardHolder>> playing_cards;
-extern std::map<int, CardHolder> hand_opponent;
-extern std::map<int, CardHolder> in_play_opponent;
 extern std::list<std::pair<int, CardHolder>> drawing_cards_opponent;
 extern std::list<std::pair<int, CardHolder>> playing_cards_opponent;
-
-enum eGameState { CHAT_SCREEN, START_GAME, GAME };
-extern eGameState currentGameState;
 
 extern CardHolder* hoverCard;
 extern CardHolder* attackingCard;
@@ -43,12 +30,12 @@ extern float arrow_head_x;
 extern float arrow_head_y;
 
 extern CardCache cache;
-extern Deck deck_player;
-
 extern Player player;
 extern Player opponent;
+extern Data gameData;
 
-void startGame(bool start, std::list<std::string>& messages);
+
+void countDown(bool start, std::list<std::string>& messages, Data gameData);
 void decideOrder(Data& gameData);
 
 
@@ -60,12 +47,16 @@ CardHolder getCardFromDeck();
 CardHolder getCardFromOpponentDeck();
 
 void play_card(int index);
-void opponent_play_card();
+void opponent_play_card(long delta);
 
-void drawApproach();
-void playApproach();
-void attack();
-void end_turn();
+void start_game();
+
+void drawApproach(long delta);
+void playApproach(long delta);
+void attack(long delta);
+void end_turn(long delta);
+
+void end_game(long delta);
 
 //
 

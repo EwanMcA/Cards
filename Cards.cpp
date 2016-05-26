@@ -7,17 +7,12 @@
 #include "Util.hpp"
 
 
-Card::Card(int ID, std::string type, short attack, short health, short cost, int abilities, int targets, int effects) 
-	:ID(ID), type(type), attack(attack), health(health), cost(cost), 
+Card::Card(int ID, std::string type, short attack, short health, short cost, int status, int abilities, int targets, int effects) 
+	:ID(ID), type(type), attack(attack), health(health), cost(cost), status(status),
 	abilities(abilities), targets(targets), effects(effects),
 	current_attack(attack), current_health(health), current_status(status)
 {
-	if (type == "Creature") {
-		attack_flag = true;
-	}
-	else {
-		attack_flag = false;
-	}
+	attack_flag = false;
 }
 
 Card::~Card()
@@ -34,7 +29,7 @@ void Card::modifySpecs(short attackChange, short healthChange)
 
 
 CardHolder::CardHolder(Card& card, float x, float y, float z, float scale, bool face_up)
-	:card(card), x(x), y(y), z(z), scale(scale), face_up(face_up)
+	:card(card), x(x), y(y), z(z), scale(scale), face_up(face_up), attackable(false)
 {
 
 }
@@ -44,7 +39,6 @@ bool CardHolder::collidesWithRay(float xs, float ys, float zs, float xe, float y
 	float t = (this->z - zs) / (ze - zs);
 	float x = xs + t*(xe - xs);
 	float y = ys + t*(ye - ys);
-	//std::cout << std::to_string(this->x)+" "+std::to_string(this->y) << std::endl;
 	return (x > this->x && y > this->y && x < this->x + 0.15 && y < this->y + 0.3);
 }
 
@@ -67,10 +61,30 @@ void CardHolder::moveTo(float x, float y, float z)
 	this->z = z;
 }
 
+bool CardHolder::moveToward(float x, float y, float z, long delta)
+{
+	if (x != this->x) {
+		this->x += ((x - this->x) / abs(x - this->x))*0.001f*delta;
+	}
+	if (y != this->y) {
+		this->y += ((y - this->y) / abs(y - this->y))*0.001f*delta;
+	}
+	if (abs(x - this->x) <= 0.005f*delta && abs(y - this->y) <= 0.005f*delta) {
+		return true;
+	}
+	return false;
+}
+
+
 
 Deck::Deck()
 {
-
+	for (int i = 0; i < 60; i++)
+	{
+		//Read Cards from file, with 10 bin digits representing ID code (links with image)
+		//ATM i'm just going to use 'int' for ID code.
+		this->cardIDs.push_back(i % 2);
+	}
 }
 
 Deck::Deck(int size, std::list<int> cards)
@@ -80,7 +94,7 @@ Deck::Deck(int size, std::list<int> cards)
 	{
 		//Read Cards from file, with 10 bin digits representing ID code (links with image)
 		//ATM i'm just going to use 'int' for ID code.
-		this->cardIDs.push_back(i);
+		this->cardIDs.push_back(i % 2);
 	}
 }
 
@@ -112,6 +126,9 @@ void CardCache::loadCard(int global_ID)
 		short health = (short) std::stoi(trim(line));
 		getline(card_file, line);
 		getline(card_file, line);
+		int status = std::stoi(trim(line));
+		getline(card_file, line);
+		getline(card_file, line);
 		int ability = std::stoi(line);
 		int target;
 		int effect;
@@ -128,16 +145,17 @@ void CardCache::loadCard(int global_ID)
 			effect = 0;
 		}
 		card_file.close();
-		Card card(global_ID, type, attack, health, cost, ability, target, effect); // This ID will change when drawn.
+		Card card(global_ID, type, attack, health, cost, status, ability, target, effect); // This ID will change when drawn.
 		cached_cards.insert(std::pair<int, Card>(global_ID, card));
 	}
 
 	else std::cout << "Unable to open file";
 }
 
-Card& CardCache::get_card(int global_ID) 
+Card CardCache::get_card(int global_ID) 
 { 
-	cached_cards.at(global_ID).set_play_ID(IDcount);
+	Card card = cached_cards.at(global_ID);
+	card.set_play_ID(IDcount);
 	IDcount++;
-	return cached_cards.at(global_ID);
+	return card;
 }

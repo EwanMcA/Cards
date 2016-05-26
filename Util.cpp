@@ -12,35 +12,20 @@
 
 const int SCREEN_WIDTH = 800;
 const int SCREEN_HEIGHT = 600;
+float depth = 2.25f;
+
 
 std::string msg = "";
 std::list<std::string> messages;
-int turn = 0;
-bool ready = false;
-bool opponentReady = false;
 
 Player player;
 Player opponent;
 Data gameData(player, opponent);
-std::deque<fp> action_pipeline;
 
-std::map<int, CardHolder> hand;
-std::map<int, CardHolder> in_play;
 std::list<std::pair<int, CardHolder>> drawing_cards;
 std::list<std::pair<int, CardHolder>> playing_cards;
-std::map<int, CardHolder> hand_opponent;
-std::map<int, CardHolder> in_play_opponent;
 std::list<std::pair<int, CardHolder>> drawing_cards_opponent;
 std::list<std::pair<int, CardHolder>> playing_cards_opponent;
-
-eGameState currentGameState;
-
-float depth = 2.25f;
-
-//Card ewan(1, 7, 5, 1, 2, 2, 2);
-//CardHolder ch(ewan, 0.0f, -0.35f, 0.0f, 1, );
-//CardHolder ch1(ewan, -0.3f, -0.6f, 1.0f, 1);
- // camera z position.
 
 CardHolder* hoverCard = nullptr;
 CardHolder* attackingCard = nullptr;
@@ -53,20 +38,16 @@ float movY = 0.0f;
 float arrow_head_x = 0.0f;
 float arrow_head_y = 0.0f;
 
-
-
 CardCache cache;
-Deck deck_player;
 
-
-void startGame(bool start, std::list<std::string>& messages)
+void countDown(bool start, std::list<std::string>& messages, Data gameData)
 {
 	static int i = 5;
 	if (!start) { i = 5; }
 	else {
 		messages.push_back(std::to_string(i));
 		i--;
-		if (i < -750) { currentGameState = START_GAME; }
+		if (i < -750) { gameData.set_game_state(START_GAME); }
 	}
 }
 
@@ -118,25 +99,25 @@ void position_hand_opponent(std::map<int, CardHolder>& hand) {
 	}
 }
 
-void drawApproach()
+void drawApproach(long delta)
 {
 	for (std::list<std::pair<int, CardHolder>>::iterator it = drawing_cards.begin(); it != drawing_cards.end(); ++it) {
-		it->second.moveBy(-0.001f, -0.00005f, 0.0f);
+		it->second.moveBy(-0.001f, -0.00005f*(delta), 0.0f);
 		if (it->second.getX() < 0) {
-			hand.insert(*it);
+			player.hand.insert(*it);
 			drawing_cards.pop_front();
-			position_hand(hand);
+			position_hand(player.hand);
 			request_repaint();
 			break;
 		}
 		request_repaint();
 	}
 	for (std::list<std::pair<int, CardHolder>>::iterator it = drawing_cards_opponent.begin(); it != drawing_cards_opponent.end(); ++it) {
-		it->second.moveBy(0.001f, -0.00005f, 0.0f);
+		it->second.moveBy(0.001f, -0.00005f*(delta), 0.0f);
 		if (it->second.getX() > 0) {
-			hand_opponent.insert(*it);
+			opponent.hand.insert(*it);
 			drawing_cards_opponent.pop_front();
-			position_hand_opponent(hand_opponent);
+			position_hand_opponent(opponent.hand);
 			request_repaint();
 			break;
 		}
@@ -144,155 +125,170 @@ void drawApproach()
 	}
 }
 
-void playApproach()
+void playApproach(long delta)
 {
 	//Disregard:
 	// At the moment, the first block is obsolete, as the card-over-field animation brings the depth up beforehand.
 	// It's a matter of taste, but I currently like the over-field animation, feels more like player's control.
 	if (!playing_cards.empty()) {
 		CardHolder * ch = &playing_cards.front().second;
-		ch->moveBy(0.0f, 0.0f, -0.00025f);
+		ch->moveBy(0.0f, 0.0f, -0.00025f*(delta));
 		if (ch->getZ() <= 1.0f) {
 			ch->moveTo(ch->getX(), ch->getY(), 0.0f);
-			in_play.insert(playing_cards.front());
+			player.in_play.insert(playing_cards.front());
 			playing_cards.pop_front();
-			position_field(in_play, true);
-			action_pipeline.pop_front();
+			position_field(player.in_play, true);
+			gameData.finish_action();
 		}
 		request_repaint();
 	} else if (!playing_cards_opponent.empty()) {
 		CardHolder * ch = &playing_cards_opponent.front().second;
 		if (ch->getY() > 0.1f)
-			ch->moveBy(0.0f, -0.0005f, 0.0005f);
+			ch->moveBy(0.0f, -0.0005f*(delta), 0.0005f*(delta));
 		else
-			ch->moveBy(0.0f, 0.0f, 0.0005f);
+			ch->moveBy(0.0f, 0.0f, 0.0005f*(delta));
 		if (ch->getZ() > 1.1f) {
-			ch->moveBy(0.0f, 0.0f, -0.1f);
-			in_play_opponent.insert(playing_cards_opponent.front());
+			ch->moveBy(0.0f, 0.0f, -0.1f*(delta));
+			opponent.in_play.insert(playing_cards_opponent.front());
 			playing_cards_opponent.pop_front();
-			position_field(in_play_opponent, false);
-			action_pipeline.pop_front();
+			position_field(opponent.in_play, false);
+			gameData.finish_action();
 		}
 		request_repaint();
 	}
 }
 
 CardHolder getCardFromDeck() {
-	//cache.loadCard(deck_player.getTopID())
-	cache.loadCard(0);
-	Card & nextCard = cache.get_card(0);
+	cache.loadCard(player.deck.getTopID());
+	//cache.loadCard(0);
+	Card nextCard = cache.get_card(player.deck.getTopID());
 	CardHolder holder(nextCard, 0.85f, -0.5f, 1.0f, 1, true);
+	player.deck.pop_front_card();
 	return holder;
 }
 
 CardHolder getCardFromOpponentDeck() {
-	//cache.loadCard(deck_opponent.getTopID())
-	cache.loadCard(0);
-	Card & nextCard = cache.get_card(0);
+	cache.loadCard(opponent.deck.getTopID());
+	//cache.loadCard(0);
+	Card nextCard = cache.get_card(opponent.deck.getTopID());
 	CardHolder holder(nextCard, -1.2f, 0.55f, 0.5f, 1, false);
+	opponent.deck.pop_front_card();
 	return holder;
 }
 
 void play_card(int ID)
 {
 	//activate abilities.
-	auto it = hand.find(ID);
+	auto it = player.hand.find(ID);
 	playing_cards.push_back(*it);
 	gameData.get_energy_player().alter_current(-(it->second.getCard().getCost()));
-	hand.erase(it);
-	position_hand(hand);
-	action_pipeline.push_back(&playApproach);
+	player.hand.erase(it);
+	position_hand(player.hand);
+	gameData.insert_next_action(&playApproach);
 	send_play_card(ID);
 }
 
-void opponent_play_card()
+void opponent_play_card(long delta)
 {
-	//std::cout << std::to_string(ID) << std::endl;
 	//add to in_play if necessary.
 	//activate abilities - wait for targets etc...?
-	if (gameData.has_unplayed_cards()) {
-		auto it = hand_opponent.find(gameData.get_unplayed_card());
-		playing_cards_opponent.push_back(*it);
-		gameData.get_energy_opponent().alter_current(-(it->second.getCard().getCost()));
-		hand_opponent.erase(it);
-		position_hand_opponent(hand_opponent);
-		action_pipeline.push_back(&playApproach);
-		action_pipeline.pop_front();
+	if (drawing_cards_opponent.empty()) {
+		if (gameData.has_unplayed_cards()) {
+			auto it = opponent.hand.find(gameData.get_unplayed_card());
+			playing_cards_opponent.push_back(*it);
+			gameData.get_energy_opponent().alter_current(-(it->second.getCard().getCost()));
+			opponent.hand.erase(it);
+			position_hand_opponent(opponent.hand);
+			gameData.finish_action();
+			gameData.insert_next_action(&playApproach);
+		}
 	}
-
 }
 
-void end_turn() {
+void start_game() {
+	if (net_isServer()) {
+		for (int i = 0; i < 4; i++) {
+			CardHolder start_card_player = getCardFromDeck();
+			drawing_cards.push_back(std::pair<int, CardHolder>(start_card_player.getCard().getID(), start_card_player));
+			CardHolder start_card_opponent = getCardFromOpponentDeck();
+			drawing_cards_opponent.push_back(std::pair<int, CardHolder>(start_card_opponent.getCard().getID(), start_card_opponent));
+		}
+	}
+	else {
+		for (int i = 0; i < 4; i++) {
+			CardHolder start_card_opponent = getCardFromOpponentDeck();
+			drawing_cards_opponent.push_back(std::pair<int, CardHolder>(start_card_opponent.getCard().getID(), start_card_opponent));
+			CardHolder start_card_player = getCardFromDeck();
+			drawing_cards.push_back(std::pair<int, CardHolder>(start_card_player.getCard().getID(), start_card_player));
+		}
+	}
+}
+
+void end_turn(long delta) {
 	if (gameData.is_my_turn()) {
 		CardHolder holder = getCardFromOpponentDeck();
 		drawing_cards_opponent.push_back(std::pair<int, CardHolder>(holder.getCard().getID(), holder));
 		gameData.get_energy_opponent().alter_max(1);
 		gameData.get_energy_opponent().set_current(gameData.get_energy_opponent().get_max());
-
 		send_end_turn();
+		for (auto &it : player.in_play) {
+			it.second.getCard().set_can_attack(true);
+		}
 	}
 	else {
 		CardHolder holder = getCardFromDeck();
 		drawing_cards.push_back(std::pair<int, CardHolder>(holder.getCard().getID(), holder));
 		gameData.get_energy_player().alter_max(1);
 		gameData.get_energy_player().set_current(gameData.get_energy_player().get_max());
+
 	}
-	action_pipeline.pop_front();
+	gameData.finish_action();
 	gameData.toggle_turn();
 }
 
-//void player_attack()
-//{
-//	// how to check for taunt etc... ?
-//	if ((hoverCard->getCard().get_current_health() - attackingCard->getCard().get_current_attack()) <= 0) {
-//		// kill.
-//	} else {
-//		hoverCard->getCard().modifySpecs(0, -attackingCard->getCard().get_current_attack());
-//	}
-//	if ((attackingCard->getCard().get_current_health() - hoverCard->getCard().get_current_attack()) <= 0) {
-//		// kill.
-//	}
-//	else {
-//		attackingCard->getCard().modifySpecs(0, -hoverCard->getCard().get_current_attack());
-//	}
-//}
-
-void attack() {
+void attack(long delta) {
 	CardHolder* attacker;
 	CardHolder* defender;
-	std::cout << std::to_string(gameData.get_attacker()) << std::endl;
 	if (gameData.is_my_turn()) {
-		attacker = &(in_play.at(gameData.get_attacker()));
-		defender = &(in_play_opponent.at(gameData.get_defender()));
+		attacker = &(player.in_play.at(gameData.get_attacker()));
+		defender = &(opponent.in_play.at(gameData.get_defender()));
 	}
 	else {
-		attacker = &(in_play_opponent.at(gameData.get_attacker()));
-		defender = &(in_play.at(gameData.get_defender()));
+		attacker = &(opponent.in_play.at(gameData.get_attacker()));
+		defender = &(player.in_play.at(gameData.get_defender()));
 	}
+	if (attacker->moveToward(defender->getX(), defender->getY(), 0.0f, delta)) { // This is elegant, but really animation should be de-coupled from logic.
+		defender->getCard().modifySpecs(0, -attacker->getCard().get_current_attack());
+		attacker->getCard().modifySpecs(0, -defender->getCard().get_current_attack());
 
-	defender->getCard().modifySpecs(0, -attacker->getCard().get_current_attack());
-	attacker->getCard().modifySpecs(0, -defender->getCard().get_current_attack());
-
-	if (gameData.is_my_turn()) {
-		if (defender->getCard().get_current_health() <= 0) {
-			in_play_opponent.erase(gameData.get_defender());
+		if (gameData.is_my_turn()) {
+			if (defender->getCard().get_current_health() <= 0) {
+				opponent.in_play.erase(gameData.get_defender());
+			}
+			if (attacker->getCard().get_current_health() <= 0) {
+				player.in_play.erase(gameData.get_attacker());
+			}
 		}
-		if (attacker->getCard().get_current_health() <= 0) {
-			in_play.erase(gameData.get_attacker());
+		else {
+			if (defender->getCard().get_current_health() <= 0) {
+				player.in_play.erase(gameData.get_defender());
+			}
+			if (attacker->getCard().get_current_health() <= 0) {
+				opponent.in_play.erase(gameData.get_attacker());
+			}
 		}
+		position_field(player.in_play, true);
+		position_field(opponent.in_play, false);
+		attacker->getCard().set_can_attack(false);
+		gameData.finish_action();
 	}
-	else {
-		if (defender->getCard().get_current_health() <= 0) {
-			in_play.erase(gameData.get_defender());
-		}
-		if (attacker->getCard().get_current_health() <= 0) {
-			in_play_opponent.erase(gameData.get_attacker());
-		}
-	}
-	
-	action_pipeline.pop_front();
+	request_repaint();
 }
 
+void end_game(long delta) {
+	closeNetworking();
+	std::exit(0);
+}
 
 //
 

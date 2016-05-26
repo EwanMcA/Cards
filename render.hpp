@@ -8,6 +8,8 @@
 
 void renderBitmapString(float x, float y, float z, void *font, const char *string);
 
+GLuint load_texture(const char * filename);
+
 void renderConnectionMenu(bool ready, std::string currentMessage, std::list<std::string>& messages);
 
 void renderTextEntryBox(float x, float y, float z, float width, float height, std::string currentMessage);
@@ -18,7 +20,9 @@ void renderReadyButton(bool ready, float x, float y, float z, float width, float
 
 void renderGameBoard(int SCREEN_WIDTH, int SCREEN_HEIGHT, Data& gameData);
 
-void renderPlayer(Player player, float x, float y, float z);
+void renderPlayer(Player &player, float x, float y, float z);
+
+void render_end_turn_button(float x, float y, float z, float scale);
 
 void renderEnergy(short energy, float x, float y, float z);
 
